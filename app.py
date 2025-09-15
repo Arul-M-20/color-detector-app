@@ -1,18 +1,24 @@
 import streamlit as st
 import pandas as pd
-import cv2
 import numpy as np
+from PIL import Image
+from streamlit_image_coordinates import streamlit_image_coordinates
 
+# ----------------------------
 # Load the dataset
+# ----------------------------
 @st.cache_data
 def load_colors():
-    return pd.read_csv("colors.csv", names=["color", "color_name", "hex", "R", "G", "B"], header=None)
+    # If your CSV has a header row (color,color_name,hex,R,G,B)
+    return pd.read_csv("colors.csv")
 
 colors_df = load_colors()
 
-# Function to get color name
+# ----------------------------
+# Helper function to get closest color name
+# ----------------------------
 def get_color_name(R, G, B):
-    minimum = 10000
+    minimum = float("inf")
     cname = ""
     for i in range(len(colors_df)):
         d = abs(R - int(colors_df.loc[i, "R"])) + abs(G - int(colors_df.loc[i, "G"])) + abs(B - int(colors_df.loc[i, "B"]))
@@ -21,35 +27,36 @@ def get_color_name(R, G, B):
             cname = colors_df.loc[i, "color_name"]
     return cname
 
+# ----------------------------
 # Streamlit UI
-st.title("🎨 Color Detector App")
+# ----------------------------
+st.set_page_config(page_title="Color Detector", layout="centered")
+st.title("🎨 Image Color Detector")
 
-uploaded_file = st.file_uploader("Upload an Image", type=["jpg", "png", "jpeg"])
+uploaded_file = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])
 
 if uploaded_file is not None:
-    # Convert file to OpenCV image
-    file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-    img = cv2.imdecode(file_bytes, 1)
+    # Open image with PIL
+    image = Image.open(uploaded_file)
+    st.write("Click on the image to detect colors:")
 
-    # Convert BGR → RGB
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-    st.image(img_rgb, caption="Uploaded Image", use_column_width=True)
-
-    st.markdown("### 👉 Click anywhere on the image to detect color")
-
-    # Use Streamlit image coordinates (extra package already added in your logs)
-    from streamlit_image_coordinates import streamlit_image_coordinates
-
-    coords = streamlit_image_coordinates(img_rgb, key="color_picker")
+    # Get click coordinates
+    coords = streamlit_image_coordinates(image, key="pil")
 
     if coords is not None:
         x, y = coords["x"], coords["y"]
-        b, g, r = img[y, x]
-        color_name = get_color_name(r, g, b)
+
+        # Convert image to numpy
+        img_np = np.array(image)
+        R, G, B = img_np[y, x]
+
+        color_name = get_color_name(R, G, B)
 
         st.markdown(f"**Detected Color:** {color_name}")
-        st.write(f"RGB: ({r}, {g}, {b})")
+        st.write(f"RGB Values: ({R}, {G}, {B})")
 
-        # Show detected color as a swatch
-        st.image(np.zeros((100, 100, 3), dtype=np.uint8) + [b, g, r], caption=color_name)
+        # Show a box filled with the detected color
+        st.markdown(
+            f"<div style='width:100px; height:50px; background-color:rgb({R},{G},{B}); border:1px solid #000;'></div>",
+            unsafe_allow_html=True
+        )
